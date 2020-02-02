@@ -33,7 +33,7 @@ VAR
 END_VAR
 
 
-X.DTI := DTI; (* Datum / Zeit eintragen *)
+X.DTI := DTI; (* Enter the date / time *)
 IF DTI <> dti_last THEN
 	X.CLOCK_TRIG := TRUE;
 	dti_last := DTI;
@@ -42,78 +42,80 @@ ELSE
 	X.CLOCK_TRIG := FALSE;
 END_IF;
 
-IF X.ADD_HEADER = FALSE THEN (* wenn add-header und add-data gleichzeitig ansteht, dann add-data einen zyklus länger anstehen lassen *)
+IF X.ADD_HEADER = FALSE THEN (* if add-header and add-data are pending at the same time, then add-data can be pending for one cycle longer *)
 	X.ADD_DATA := FALSE;
 END_IF;
 X.ADD_HEADER := FALSE;
 
 IF ENABLE THEN
 	IF X.CLOCK_TRIG THEN
-		fn := OSCAT_BASIC.DT_TO_STRF(DTI, 0, FILENAME, 0); (* automatische Dateinamen generierung *)
-		IF TRIG_T > 0 THEN (* automatischer Trigger *)
+		fn := OSCAT_BASIC.DT_TO_STRF(DTI, 0, FILENAME, 0); (* automatic file name generation *)
+		IF TRIG_T > 0 THEN (* automatic trigger *)
 			ra := DT_TO_UDINT(DTI) MOD TRIG_T = 0;
 		END_IF;
 	ELSE
 		ra := FALSE;
 	END_IF;
-	IF (TRIG_M AND NOT trig_m_last) OR ra OR X.ADD_DATA_REQ THEN (* manueller, automatischer oder externer Trigger *)
-		X.ADD_DATA := TRUE; (* Daten loggen *)
+	IF (TRIG_M AND NOT trig_m_last) OR ra OR X.ADD_DATA_REQ THEN (* manual, automatic or external trigger *)
+		X.ADD_DATA := TRUE; (* Log data *)
 	END_IF;
 	IF NOT init THEN
 		init := TRUE;
-		X.ADD_HEADER := TRUE; (* Spaltenüberschriften übernehmen *)
+		X.ADD_HEADER := FALSE; (* Apply column headings *)
 	END_IF;
 END_IF;
-X.ADD_DATA_REQ := FALSE; (* externe Anforderung rücksetzen *)
+X.ADD_DATA_REQ := FALSE; (* Reset external request *)
 
 IF (NOT ENABLE AND enable_last) OR (fn <> fn_last AND step > 0) THEN (* Neg. Flanke ENABLE - Log Stop *)
 	fn_last := fn;
 	X.UCB.D_HEAD := WORD#16#FF00;
 	X.UCB.D_MODE := 1;
-	UCB(DATA:=X.UCB); (* Element schreiben *)
-	X.ADD_HEADER := TRUE; (* Spaltenüberschriften übernehmen *)
+	UCB(DATA:=X.UCB); (* Write element *)
+	X.ADD_HEADER := FALSE; (* Apply column headings *)
 END_IF;
 
 CASE step OF
 
 00:	IF ENABLE THEN
 		fn_last := fn;
-		FSD.FILENAME := fn; (* Dateiname *)
-		FSD.OFFSET := 0; (* Start bei Dateianfang *)
+		FSD.FILENAME := fn; (* filename *)
+		FSD.OFFSET := 0; (* Start at the beginning of the file *)
 		FSD.AUTO_CLOSE := T#0s; (* Auto-Close *)
 		step := 10;
 	END_IF;
 
-10:	(* Headerdaten schreiben *)
-	str := '<?xml version="1.0" encoding="UTF-8"?><table>';
+10:	(* Write header data *)
+	str := '<HydroTelImport><Data><Identifier>abc123</Identifier><DateTimeFormat>yyyy-mm-dd hh:nn:ss</DateTimeFormat>';
 	OSCAT_BASIC._STRING_TO_BUFFER(STR:=str, POS:=idx, PT:=ADR(PT.BUFFER), SIZE:=SIZEOF(PT.BUFFER));
 	idx := idx + OSCAT_BASIC.LEN(str);
 	step := 20;
 
 20:	IF log_state = 254 THEN
 		log_state := 255;
-		str := '</table>';
+		str := '</Data></HydroTelImport>';
 		OSCAT_BASIC._STRING_TO_BUFFER(STR:=str, POS:=idx, PT:=ADR(PT.BUFFER), SIZE:=SIZEOF(PT.BUFFER));
 		idx := idx + OSCAT_BASIC.LEN(str);
-		step := 40; (* Daten schreiben *)
+		step := 40; (* Write data *)
 
-	ELSIF X.UCB.BUF_COUNT > 0 THEN (* Einträge vorhanden *)
+	ELSIF X.UCB.BUF_COUNT > 0 THEN (* Entries available *)
 		X.UCB.D_MODE := 10;
-		UCB(DATA:=X.UCB); (* Element lesen , aber noch nicht entfernen *)
+		UCB(DATA:=X.UCB); (* Read item, but do not remove it yet *)
 
 		IF X.UCB.D_HEAD = WORD#16#FF00 THEN (* LOG_STOP Command *)
 			X.UCB.D_MODE := 11;
-			UCB(DATA:=X.UCB); (* Element entfernen *)
+			UCB(DATA:=X.UCB); (* Remove item *)
 			log_state := 254;
 
-		ELSIF idx + OSCAT_BASIC.LEN(X.UCB.D_STRING) + 120 < SIZEOF(PT) THEN (* Platz für Element vorhanden ? *)
+		ELSIF idx + OSCAT_BASIC.LEN(X.UCB.D_STRING) + 120 < SIZEOF(PT) THEN (* Space for element? *)
 			X.UCB.D_MODE := 11;
-			UCB(DATA:=X.UCB); (* Element entfernen *)
-
+			UCB(DATA:=X.UCB); (* Remove item *)
+			
 			IF log_state = 0 THEN
-				str := '<row><entry>';
+				str := '<S><V>';
+			ELSEIF n = 1 THEN
+				str := '<DT>';
 			ELSE
-				str := '<entry>';
+				str := '<Q>';				
 			END_IF;
 
 			OSCAT_BASIC._STRING_TO_BUFFER(STR:=str, POS:=idx, PT:=ADR(PT.BUFFER), SIZE:=SIZEOF(PT.BUFFER));
@@ -124,22 +126,25 @@ CASE step OF
 			idx := idx + OSCAT_BASIC.LEN(X.UCB.D_STRING);
 
 			n := n + 1;
+
 			IF n = X.ID_MAX THEN
 				n := 0;
-				str := '</entry></row>';
+				str := '</Q></S>';
 				log_state := 0;
+			ELSEIF n = 1 THEN
+				str := '</V>';
 			ELSE
-				str := '</entry>';
+				str := '</DT>';
 			END_IF;
 			OSCAT_BASIC._STRING_TO_BUFFER(STR:=str, POS:=idx, PT:=ADR(PT.BUFFER), SIZE:=SIZEOF(PT.BUFFER));
 			idx := idx + OSCAT_BASIC.LEN(str);
 		END_IF;
-		step := 40; (* Daten schreiben *)
+		step := 40; (* Write data *)
 	END_IF;
 
-40:	IF idx > 0 THEN (* Daten schreiben *)
+40:	IF idx > 0 THEN (* Write data  *)
 		FSD.MODE := 3; (* create + write *)
-		PT.SIZE := idx; (* Datenlänge eintragen *)
+		PT.SIZE := idx; (* Enter data length *)
 		idx := 0;
 	END_IF;
 	step := 60;
@@ -147,7 +152,7 @@ CASE step OF
 60:	IF FSD.MODE = 0 THEN
 		IF log_state = 255 THEN
 			log_state := 0;
-			FSD.MODE := 5; (* Datei schliessen *)
+			FSD.MODE := 5; (* Close file *)
 			X.NEW_FILE := FSD.FILENAME;
 			X.NEW_FILE_RTRIG := FALSE;
 			step := 80;
@@ -156,7 +161,7 @@ CASE step OF
 		END_IF;
 	END_IF;
 
-80:	IF FSD.MODE = 0 THEN (* Datei schliessen beendet *)
+80:	IF FSD.MODE = 0 THEN (* Close file finished *)
 		X.NEW_FILE_RTRIG := TRUE;
 		step := 0;
 	END_IF;
