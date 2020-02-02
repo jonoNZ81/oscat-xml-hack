@@ -115,7 +115,7 @@ CASE step OF
 			ELSEIF n = 1 THEN
 				str := '<DT>';
 			ELSE
-				str := '<Q>';				
+				str := '<Q>';
 			END_IF;
 
 			OSCAT_BASIC._STRING_TO_BUFFER(STR:=str, POS:=idx, PT:=ADR(PT.BUFFER), SIZE:=SIZEOF(PT.BUFFER));
