@@ -109,7 +109,7 @@ CASE step OF
 		ELSIF idx + OSCAT_BASIC.LEN(X.UCB.D_STRING) + 120 < SIZEOF(PT) THEN (* Space for element? *)
 			X.UCB.D_MODE := 11;
 			UCB(DATA:=X.UCB); (* Remove item *)
-			
+
 			IF log_state = 0 THEN
 				str := '<S><V>';
 			ELSEIF n = 1 THEN
