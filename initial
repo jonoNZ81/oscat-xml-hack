@@ -66,7 +66,7 @@ IF ENABLE THEN
 END_IF;
 X.ADD_DATA_REQ := FALSE; (* Reset external request *)
 
-IF (NOT ENABLE AND enable_last) OR (fn <> fn_last AND step > 0) THEN (* Neg. Flanke ENABLE - Log Stop *)
+IF (NOT ENABLE AND enable_last) THEN (* Neg. Flanke ENABLE - Log Stop *)
 	fn_last := fn;
 	X.UCB.D_HEAD := WORD#16#FF00;
 	X.UCB.D_MODE := 1;
@@ -85,7 +85,7 @@ CASE step OF
 	END_IF;
 
 10:	(* Write header data *)
-	str := '<HydroTelImport><Data><Identifier>abc123</Identifier><DateTimeFormat>yyyy-mm-dd hh:nn:ss</DateTimeFormat>';
+	str := '"<?xml version=""1.0""?>"<HydroTelImport><Data><Identifier>abc123</Identifier><DateTimeFormat>yyyy-mm-dd-hh:nn:ss</DateTimeFormat>';
 	OSCAT_BASIC._STRING_TO_BUFFER(STR:=str, POS:=idx, PT:=ADR(PT.BUFFER), SIZE:=SIZEOF(PT.BUFFER));
 	idx := idx + OSCAT_BASIC.LEN(str);
 	step := 20;
@@ -112,7 +112,7 @@ CASE step OF
 
 			IF log_state = 0 THEN
 				str := '<S><V>';
-			ELSEIF n = 1 THEN
+			ELSIF n = 1 THEN
 				str := '<DT>';
 			ELSE
 				str := '<Q>';
@@ -131,7 +131,7 @@ CASE step OF
 				n := 0;
 				str := '</Q></S>';
 				log_state := 0;
-			ELSEIF n = 1 THEN
+			ELSIF n = 1 THEN
 				str := '</V>';
 			ELSE
 				str := '</DT>';
